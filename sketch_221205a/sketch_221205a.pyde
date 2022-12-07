@@ -32,7 +32,7 @@ def keyReleased(): #making digger stop when key is released
 
         
 def mouseClicked():
-    mouse = Coordinates(mouseX, mouseY)
+    mouse = Point(mouseX, mouseY)
     if game.is_pause: #click during pause to resume the game
         game.pause_screen.click_handler(mouse)
     elif game.is_game_over: #click on gameover screen to go to the welcome screen
@@ -40,7 +40,7 @@ def mouseClicked():
     elif not game.is_level_active: #click on the welcome screen to start the game
         game.welcome_screen.click_handler(mouse)
 
-class Coordinates:
+class Point:
     def __init__(self, x, y):
         self.x = x
         self.y = y
@@ -103,34 +103,57 @@ class Digger (Creature): #can create paths in maze
         self.y = col*CELL_W
         self.dir = DIRS[0]
         self.speed = SPEED
+        self.tunnel_gap = 4
     
     def shoot_fire(self):
         pass
         
         
     def key_pressed(self, pressed_key):
-        if keyCode in DIRS:
-            game.digger.key_handler = pressed_key 
-            self.dir = pressed_key
+        # if pressed_key not in self.key_handler:
+        #     self.key_handler.append(pressed_key)
+        if self.key_handler != pressed_key and pressed_key in DIRS:
+            self.key_handler = pressed_key 
+            # self.dir = pressed_key
         
     def key_released(self, released_key):
-        if keyCode in DIRS:
-            game.digger.key_handler = None
-            
+        # try:
+        #     self.key_handler.remove(released_key)
+        # except:
+            # pass
+        if released_key in DIRS and self.key_handler == released_key:
+            self.key_handler = None
+     
+ 
+    def erase(self):
+        fill(*game.ground.colour)
+        rectMode(CORNER)
+        rect(self.x+self.tunnel_gap, self.y+self.tunnel_gap, CELL_W-self.tunnel_gap*2, CELL_H-self.tunnel_gap*2)
+              
     def display(self):
+        # print(self.key_handler, keyCode)
+        self.erase()
         self.update()
         #animation
         #turning the image according to self.dir
         fill(0)
         rectMode(CORNER)
-        rect(self.x, self.y, CELL_W, CELL_H)
-        
+        rect(self.x+self.tunnel_gap, self.y+self.tunnel_gap, CELL_W-self.tunnel_gap*2, CELL_H-self.tunnel_gap*2)
+    
     def update(self):
+        # print(self.key_handler)
         if self.key_handler != None:
+            # self.update_grid_pos()
+            # print(str(self.key_handler))
+            if self.dir != self.key_handler and abs(DIRS.index(self.dir)-DIRS.index(self.key_handler)) == 2: 
+                self.dir = self.key_handler
+                # print("dd")
+            elif  self.dir != self.key_handler and self.x % CELL_W == 0 and self.y % CELL_H == 0:
+                self.dir = self.key_handler
             self.x = self.x + self.speed*INC[DIRS.index(self.dir)][0]
             self.y = self.y + self.speed*INC[DIRS.index(self.dir)][1]
-            self.update_grid_pos()
-            # print(str(self.key_handler))
+            
+            
             
     def update_grid_pos(self):
         self.row = self.y//CELL_H
@@ -184,6 +207,7 @@ class WelcomeScreen:
     def start_game(self): 
         game.is_level_active = True
         background(0)
+        game.game_setup()
         
     
 class GameOverScreen:
@@ -217,11 +241,31 @@ class PauseScreen:
 class Ground():
     def __init__(self):
         self.layout = []
-        self.colour = None
+        self.colour = (139,69,19)
+
+        self.gap = 20
         # initial layout by initial maze
         
     def update(self):
-        pass
+        if self.layout == []:
+            self.layout.append(Point(game.digger.x, game.digger.y))
+        elif abs(self.layout[-1].x - game.digger.x) > self.gap or abs(self.layout[-1].y - game.digger.y) > self.gap:
+            self.layout.append(Point(game.digger.x, game.digger.y))
+    
+    def display(self):
+        # for c in self.layout:
+        #     fill(*self.colour)
+        #     noStroke()
+        #     ellipseMode(CORNER)
+        #     circle(c.x, c.y, CELL_W-2)
+        if self.layout:
+            c = self.layout[-1]
+            fill(*self.colour)
+            noStroke()
+            ellipseMode(CORNER)
+            circle(c.x, c.y, CELL_W-2)
+        
+        
         
         
 class Game:
@@ -246,6 +290,9 @@ class Game:
         # self.init_ground()
         self.ground = Ground()
         
+    def game_setup(self):
+        image(self.level.backgrnd,0,100)
+        
     def display(self):
         if self.is_game_over: 
             self.game_over_screen.display()
@@ -255,8 +302,9 @@ class Game:
             self.pause_screen.display()
         else:
             # self.draw_ground()
-            image(self.level.backgrnd,0,100)
+            # image(self.level.backgrnd,0,100)
             self.move_enemies()
+            self.ground.display()
             self.digger.display()
             for e in self.enemies:
                 e.display()
@@ -265,6 +313,16 @@ class Game:
             for b in self.money_bags:
                 b.display()
             self.ground.update()
+            # self.display_grid()
+            
+    def display_grid(self):
+        for i in range(COLS):
+            stroke(0)
+            line(i*CELL_W, 0, i*CELL_W, W_HEIGHT)
+        
+        for i in range(ROWS):
+            stroke(0)
+            line(0, i*CELL_H, W_WIDTH, i*CELL_H)
             
     # def init_ground(self):
     #     for i in range(W_HEIGHT):
