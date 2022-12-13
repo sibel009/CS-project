@@ -1,6 +1,7 @@
 from collections import deque 
+from random import randint
 
-DISPLAY_GRID = True #False
+DISPLAY_GRID = False #False
 W_WIDTH = 1200 #whole window size
 W_HEIGHT = 900
 HEADER_H = 100 #header height, where scores are located during active game
@@ -66,7 +67,7 @@ class Level: #configuration of the whole level that is read from files *which we
         self.level_number = level_number
         self.config = open(PATH + "\\levels\\{0}.txt".format(self.level_number))
         """level file:
-        color of the ground, number of enemies, probability for enemies to chase you, digger fire recharge time
+        color of the ground, number of enemies, enemies speed, probability for enemies to chase you, digger fire recharge time
         number of emeralds (n), 
         n lines with coordinates of emeralds
         number of money bags (m), 
@@ -75,7 +76,7 @@ class Level: #configuration of the whole level that is read from files *which we
         maze itself"""
         vars = self.config.readline().strip().split(", ")
         self.colour = vars[0]
-        self.enemies_num, self.enemies_prob, self.recharge_time = map(int, vars[1:])
+        self.enemies_num, self.enemies_speed, self.enemies_prob, self.recharge_time = map(int, vars[1:])
         self.emeralds_num = int(self.config.readline())
         self.emeralds_pos = []
         for i in range(self.emeralds_num):
@@ -110,21 +111,20 @@ class Creature:
         self.tunnel_gap = 15
         self.colour = colour
    
-    def erase(self):
-        fill(*game.ground.colour)
-        rectMode(CORNER)
-        rect(self.x+self.tunnel_gap, self.y+self.tunnel_gap, CELL_W-self.tunnel_gap*2, CELL_H-self.tunnel_gap*2)
+    
       
-    def display(self):
-        # print(self.key_handler, keyCode)
-        self.erase()
-        self.update()
-        #animation
-        #turning the image according to self.dir
-        fill(*self.colour)        
-        rectMode(CORNER)
-        rect(self.x+self.tunnel_gap, self.y+self.tunnel_gap, CELL_W-self.tunnel_gap*2, CELL_H-self.tunnel_gap*2)
+    # def display(self):
+    #     # print(self.key_handler, keyCode)
         
+    #     print("COORD1", self.x, self.y)
+    #     self.erase()
+    #     self.update()
+    #     #animation
+    #     #turning the image according to self.dir
+    #     fill(*self.colour)        
+    #     rectMode(CORNER)
+    #     rect(self.x+self.tunnel_gap, self.y+self.tunnel_gap, CELL_W-self.tunnel_gap*2, CELL_H-self.tunnel_gap*2)
+    #     print("COORD2", self.x, self.y)
         
         
     
@@ -134,10 +134,38 @@ class Creature:
 
     
 class Nobbin (Creature): #goes only on available in maze paths
-    def __init__(self, row, col):
-        Creature.__init__(self, "nobbin.png", row, col, (255,0,0), 2)
+    def __init__(self, row, col, speed, delay = 0, update_gap = 50):
+        Creature.__init__(self, "nobbin.png", row, col, (255,0,0), speed)
         self.path = []
-        self.last_updated = -1000 #frame when path was last updated
+        self.initial_frame = -1
+        self.last_updated = -1 #frame when path was last updated
+        self.delay = delay
+        self.update_gap = update_gap
+        self.ignore_prob = 10
+        # self.is_rand = False
+        
+    def erase(self):
+        fill(*game.ground.colour)
+        rectMode(CORNER)
+        rect(self.x+self.tunnel_gap-self.speed*INC[DIRS.index(self.dir)][0], self.y+self.tunnel_gap-self.speed*INC[DIRS.index(self.dir)][1], CELL_W-self.tunnel_gap*2, CELL_H-self.tunnel_gap*2)
+        
+      
+    def display(self):
+        if self.initial_frame == -1:
+            self.initial_frame = frameCount
+            self.last_updated = frameCount
+        # print(self.key_handler, keyCode)
+        if frameCount - self.initial_frame > self.delay:
+        # print("COORD1", self.x, self.y)
+        #animation
+        #turning the image according to self.dir
+            self.erase()
+            fill(*self.colour)        
+            rectMode(CORNER)
+            rect(self.x+self.tunnel_gap, self.y+self.tunnel_gap, CELL_W-self.tunnel_gap*2, CELL_H-self.tunnel_gap*2)
+            # print("DRAWN AT", self.x, self.y)
+            # print("COORD2", self.x, self.y)
+            self.update()
         
     def update(self): #logic for enemy
         # print("FRAMECOUNT", frameCount)
@@ -145,43 +173,64 @@ class Nobbin (Creature): #goes only on available in maze paths
         #     self.bfs()
         #     self.update_dir()
         # print(self.dir)
-        if frameCount - self.last_updated > 100:
+        if len(self.path) <= 3 or frameCount - self.last_updated > self.update_gap:
             self.last_updated = frameCount
             self.bfs()
-      
-        if self.x % CELL_W == 0 and (self.y-HEADER_H) % CELL_H == 0 and len(self.path)>2:
+        if self.x % CELL_W == 0 and (self.y-HEADER_H) % CELL_H == 0:
             self.update_dir()
-                  
-        self.x = self.x + self.speed*INC[DIRS.index(self.dir)][0]
-        self.y = self.y + self.speed*INC[DIRS.index(self.dir)][1]
+        self.check_collision()
+            
+            #checking if he is allowed to go in direction of self.dir
+        if (self.x % CELL_W != 0 or (self.y-HEADER_H) % CELL_H != 0) or game.maze.adj[self.row][self.col][DIRS.index(self.dir)] == 1:
+            self.x = min(max(0, self.x + self.speed*INC[DIRS.index(self.dir)][0]), W_WIDTH-CELL_W)
+            self.y = min(max(HEADER_H, self.y + self.speed*INC[DIRS.index(self.dir)][1]), W_HEIGHT-CELL_H)
 
         self.update_grid_pos()
-        self.check_collision()
+            
+            # print("MY POSITION", self.x, self.y, self.row, self.col, INC[DIRS.index(self.dir)])
+        
         
     def update_grid_pos(self):
-        prev = Point(self.col, self.row)
+        # prev = Point(self.row, self.col)
         self.row = (self.y-HEADER_H)//CELL_H 
-        self.col = self.x//CELL_W
-        new = Point(self.col, self.row)
-        if prev != new and len(self.path) > 2:
-            print("new grid pos", prev.x, prev.y, new.x, new.y)
+        self.col = (self.x)//CELL_W
+        # new = Point(self.row, self.col)
+        # if prev != new and len(self.path) > 2:
+        #     print("new grid pos", prev.x, prev.y, new.x, new.y)
             # self.update_dir()
     
-    def update_dir(self):
-        # for p in self.path:
-        #     print(p)
-        # print("popped", popped.x, popped.y, len(self.path))
-        while self.path[0] != Point(self.row, self.col):
-            self.path.pop(0)
-        print("upd dir", [self.path[1].y - self.path[0].y, self.path[1].x - self.path[0].x])
-        self.dir = DIRS[INC.index([self.path[1].y - self.path[0].y, self.path[1].x - self.path[0].x])]
-        popped = self.path.pop(0)
+    def update_any_dir(self):
+        adj = game.maze.adj[self.row][self.col]
+        for i in range(4):
+            if adj[i] == 1:
+                self.dir = DIRS[i]
         
+    def update_dir(self):
+        # print "PATH"
+        # for p in self.path:
+            # print(p)
+        # print("popped", popped.x, popped.y, len(self.path))
+        if randint(0,100) < self.ignore_prob and max(game.maze.adj[self.row][self.col][(DIRS.index(self.dir)+1)%4], game.maze.adj[self.row][self.col][(DIRS.index(self.dir)+3)%4]):
+            prev_dir = self.dir
+            self.dir = DIRS[randint(0,3)]
+            while game.maze.adj[self.row][self.col][DIRS.index(self.dir)] == 0 or abs(DIRS.index(prev_dir) - DIRS.index(self.dir)) == 2:
+                self.dir = DIRS[randint(0,3)] 
+            self.path = []            
+        else:
+            while len(self.path) > 0 and self.path[0] != Point(self.row, self.col):
+                self.path.pop(0)
+            if len(self.path) >= 2:
+                # print("upd dir", [self.path[1].y - self.path[0].y, self.path[1].x - self.path[0].x])
+                self.dir = DIRS[INC.index([self.path[1].y - self.path[0].y, self.path[1].x - self.path[0].x])]
+                popped = self.path.pop(0)
+            
        
     def check_collision(self):
         if self.row == game.digger.row and self.col == game.digger.col:
             game.end_game()
-        elif abs(self.x - game.digger.x) < CELL_W and abs(self.y - game.digger.y) < CELL_H:
+        elif abs(self.x - game.digger.x) < CELL_W and self.row == game.digger.row and game.maze.adj[self.row][self.col][DIRS.index(self.dir)] == 1:
+            game.end_game()
+        elif abs(self.y - game.digger.y) < CELL_H and self.col == game.digger.col and game.maze.adj[self.row][self.col][DIRS.index(self.dir)] == 1:
             game.end_game()
         
                 
@@ -195,28 +244,33 @@ class Nobbin (Creature): #goes only on available in maze paths
         last = Point(-1,-1)
         while len(plan) > 0:
             v = plan.popleft()
-            print("now visiting", v.x, v.y)
+            # print("now visiting", v.x, v.y)
             if v.x == game.digger.row and v.y == game.digger.col:
                 last = v
                 break
             adj = game.maze.adj[v.x][v.y]
             for i in range(4):
                 u = Point(v.x+INC[i][1], v.y + INC[i][0])
-                if adj[i] == 1 and visited[u.x][u.y] == -1:
-                    visited[u.x][u.y] = v
-                    plan.append(u)
+                if u.x >= 0 and u.x < ROWS and u.y >= 0 and u.y < COLS:
+                    if adj[i] == 1 and visited[u.x][u.y] == -1:
+                        visited[u.x][u.y] = v
+                        plan.append(u)
                     
         #backtracking path
-        self.path = []
-        while last != start:
-            self.path.append(last)
-            print("last", last.x, last.y)
-            last = visited[last.x][last.y]
-        self.path.append(start)
-        self.path.reverse()
-        
-        for p in self.path:
-            print(p)
+        if last == Point(-1,-1):
+            # print(game.maze.adj)
+            pass
+        else:
+            self.path = []
+            while last != start:
+                self.path.append(last)
+                # print("last", last.x, last.y)
+                last = visited[last.x][last.y]
+            self.path.append(start)
+            self.path.reverse()
+        # print "PATH"
+        # for p in self.path:
+        #     print(p)
             
     
 class Hobbin (Nobbin): #can create paths in maze
@@ -235,7 +289,27 @@ class Digger (Creature): #can create paths in maze
     def shoot_fire(self):
         pass
         
+ 
+      
+    def display(self):
+        # print(self.key_handler, keyCode)
         
+        # print("COORD1", self.x, self.y)
+        self.erase()
+        self.update()
+        #animation
+        #turning the image according to self.dir
+        fill(*self.colour)        
+        rectMode(CORNER)
+        rect(self.x+self.tunnel_gap, self.y+self.tunnel_gap, CELL_W-self.tunnel_gap*2, CELL_H-self.tunnel_gap*2)
+        # print("COORD2", self.x, self.y)
+        
+              
+    def erase(self):
+        fill(*game.ground.colour)
+        rectMode(CORNER)
+        rect(self.x+self.tunnel_gap, self.y+self.tunnel_gap, CELL_W-self.tunnel_gap*2, CELL_H-self.tunnel_gap*2)
+    
     def key_pressed(self, pressed_key):
         # if pressed_key not in self.key_handler:
         #     self.key_handler.append(pressed_key)
@@ -316,6 +390,10 @@ class Maze: #layout of board, where enemies who cannot dig can go, is a graph re
             temp = []
             for j in range(COLS):
                 temp2 = []
+                #0,1
+                if i == 0 and j == 10:
+                    for a in self.layout:
+                        print(a)
                 for inc_x, inc_y in INC:
                     if self.layout[i][j] == 1 and i+inc_y >= 0 and i+inc_y < ROWS and j+inc_x >= 0 and j+inc_x < COLS and self.layout[i+inc_y][j+inc_x] == 1:
                         temp2.append(1)
@@ -335,6 +413,7 @@ class Maze: #layout of board, where enemies who cannot dig can go, is a graph re
         # print([new.x - prev.x, new.y - prev.y])
         idx = INC.index([new.x - prev.x, new.y - prev.y])
         self.adj[prev.y][prev.x][idx] = 1
+        self.adj[new.y][new.x][(idx+2)%4] = 1 # creating edge in other direction
         
         
     
@@ -395,6 +474,7 @@ class Ground():
         self.colour = (139,69,19)
         self.initial_layout = layout
         self.gap = 30
+        self.wall_w = 5
         # initial layout by initial maze
         
     def display_initial_layout(self):
@@ -405,11 +485,11 @@ class Ground():
                     fill(*self.colour)
                     ellipseMode(CORNER)
                     noStroke()
-                    circle(j*CELL_W, i*CELL_H+HEADER_H, CELL_W)
+                    circle(j*CELL_W+self.wall_w, i*CELL_H+HEADER_H+self.wall_w, CELL_W-self.wall_w)
                     for inc_x, inc_y in INC:
                         # print(i, j, inc_x, inc_y)
                         if i+inc_y >= 0 and i+inc_y < ROWS and j+inc_x >= 0 and j+inc_x < COLS and self.initial_layout[i+inc_y][j+inc_x] == 1:
-                            circle(j*CELL_W+inc_x*self.gap, i*CELL_H+HEADER_H+inc_y*self.gap, CELL_W)
+                            circle(j*CELL_W+inc_x*self.gap+self.wall_w, i*CELL_H+HEADER_H+inc_y*self.gap+self.wall_w, CELL_W-self.wall_w)
                     # rect(10,10,10,10)
                     # circle(10,10,10)
                 # print(2)
@@ -437,7 +517,7 @@ class Ground():
             fill(*self.colour)
             noStroke()
             ellipseMode(CORNER)
-            circle(c.x, c.y, CELL_W-2)
+            circle(c.x+self.wall_w, c.y+self.wall_w, CELL_W-self.wall_w)
     
         
         
@@ -454,7 +534,9 @@ class Game:
         self.enemies = []
         #initialize enemies according to level configuration
         for i in range(self.level.enemies_num):
-            self.enemies.append(Nobbin(0, COLS-1))                        
+            self.enemies.append(Nobbin(0, COLS-1, self.level.enemies_speed))  
+        self.enemies.append(Nobbin(0, COLS-1, self.level.enemies_speed-1, 200, 200))  
+        self.enemies.append(Nobbin(0, COLS-1, self.level.enemies_speed, 400, 10))         
         self.emeralds = []
         self.money_bags = []
         #initialize emeralds according to level configuration
@@ -472,8 +554,8 @@ class Game:
         self.is_level_active = True
         image(self.level.backgrnd,0,HEADER_H)
         self.ground.display_initial_layout()
-        for e in self.enemies:
-            e.bfs()
+        # for e in self.enemies:
+        #     e.bfs()
         
     def display(self):
         if self.is_game_over: 
@@ -485,7 +567,7 @@ class Game:
         else:
             # self.draw_ground()
             # image(self.level.backgrnd,0,100)
-            self.update_enemies()
+            # self.update_enemies()
             self.ground.display()
             self.digger.display()
             for e in self.enemies:
@@ -535,9 +617,9 @@ class Game:
     #             # fill(3,255,123)
     #             point(i, j)
                 
-    def update_enemies(self):
-        for enemy in self.enemies:
-            enemy.update()
+    # def update_enemies(self):
+    #     for enemy in self.enemies:
+    #         enemy.update()
             
     def quit(self):
         self.is_game_over = True
