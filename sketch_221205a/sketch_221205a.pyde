@@ -19,7 +19,7 @@ COLS = W_WIDTH/CELL_W #size of the grid
 ROWS = (W_HEIGHT-HEADER_H)/CELL_H
 LAPTOP_H = 1080 #resolution of the laptops's screen
 LAPTOP_W = 1920
-MAX_LEVEL = 2
+MAX_LEVEL = 3
 
 DISPLAY_GRID = False #False
 PATH = "D:\\NYUAD\\CS\\Final project\\CS-project" # change it to your location in laptop
@@ -102,24 +102,27 @@ class Level: #configuration of the whole level that is read from files *which we
             self.enemies_info.append(temp)
             
         self.recharge_time = int(self.config.readline().strip())
-        
-        self.emeralds_num = int(self.config.readline())
-        self.emeralds_pos = [] # x - row, y - col
-        for i in range(self.emeralds_num):
-            x, y = self.config.readline().strip().split(", ")
-            x = int(x)
-            y = int(y)
-            self.emeralds_pos.append(Point(x, y))
-            
-        self.money_bags_num = int(self.config.readline())
-        self.money_bags_pos = []
-        for i in range(self.money_bags_num):
-            x, y = self.config.readline().strip().split(", ")
-            x = int(x)
-            y = int(y)
-            self.money_bags_pos.append(Point(x, y))
-            
-        self.maze_rows, self.maze_cols = map(int, self.config.readline().strip().split(", "))
+        self.rows, self.cols = map(int, self.config.readline().strip().split(", "))
+        self.emeralds = self.read_layout() # x - row, y - col
+        self.emeralds_num = self.layout_sum(self.emeralds)
+        self.emeralds_collected = 0
+        # for i in range(self.emeralds_num):
+        #     x, y = self.config.readline().strip().split(", ")
+        #     x = int(x)
+        #     y = int(y)
+        #     self.emeralds_pos.append(Point(x, y))
+        self.config.readline()
+        self.money_bags_layout = self.read_layout()    
+        self.money_bags_num = self.layout_sum(self.money_bags_layout)
+        self.money_bags = []
+        # for i in range(self.money_bags_num):
+        #     x, y = self.config.readline().strip().split(", ")
+        #     x = int(x)
+        #     y = int(y)
+        #     self.money_bags_pos.append(Point(x, y))
+        self.config.readline()
+        self.maze_rows = self.rows
+        self.maze_cols = self.cols
         self.maze = []
         for i in range(self.maze_rows):
             temp = map(int, self.config.readline().strip().split(", "))
@@ -128,6 +131,20 @@ class Level: #configuration of the whole level that is read from files *which we
         self.config.close()
         # self.colour = tuple(map(int, self.colour[1:-1].split(",")))
         self.backgrnd = loadImage(PATH + "\\levels\\{0}.png".format(self.level_number))
+        
+    def read_layout(self):
+        layout = []
+        for i in range(self.rows):
+            line = self.config.readline().strip()
+            temp = map(int, line.split(", "))
+            layout.append(temp)
+        return layout  
+
+    def layout_sum(self, arr):
+        s = 0
+        for a in  arr:
+            s += sum(a)
+        return s            
         
 
 class Creature:
@@ -220,8 +237,8 @@ class Digger (Creature): #can create paths in maze
      
     def is_emerald_collected(self):
         if self.x % CELL_W == 0 and (self.y - HEADER_H)%CELL_H == 0:
-            if game.emeralds[self.row][self.col] != 0:
-                game.emeralds[self.row][self.col].collected()
+            if game.level.emeralds[self.row][self.col] != 0:
+                game.level.emeralds[self.row][self.col].collected()
             
     
     def update(self):
@@ -431,30 +448,33 @@ class Hobbin (Nobbin): #can create paths in maze
     
     
 class LootItem:
-    def __init__(self):
-        pass
-
-class Emerald (LootItem):
-    def __init__(self, row, col):
+    def __init__(self, row, col, img):
         self.row = row
         self.col = col
         self.x = self.col * CELL_W
         self.y = HEADER_H + self.row * CELL_H
-        self.img = loadImage(PATH+"//images//emerald.png")
-        
+        self.img = loadImage(PATH+"//images//" + img)
+       
     def display(self):
         image(self.img, self.x, self.y)
         
+        
+class Emerald (LootItem):
+    def __init__(self, row, col):
+        LootItem.__init__(self, row, col, "emerald.png")
+     
+        
     def collected(self):
-        game.emeralds[self.row][self.col] = 0
+        game.level.emeralds[self.row][self.col] = 0
         game.score += 100
-        game.emeralds_collected += 1
+        game.level.emeralds_collected += 1
         
     
 class MoneyBag (LootItem):
-    def __init__(self):
-        pass
-        
+    def __init__(self, row, col):
+        LootItem.__init__(self, row, col, "money_bag.png")
+       
+    
     def gravity(self):
         pass
     
@@ -709,13 +729,9 @@ class Game:
         self.maze = Maze(self.level.maze)
         self.score = 0
         self.enemies = []
-        self.emeralds_collected = 0
         self.init_enemies()
-        self.emeralds = [[0 for j in range(COLS)] for i in range(ROWS)]  #2d array with object of emerald if there is one
-        for e in self.level.emeralds_pos:
-            self.emeralds[e.x][e.y] = Emerald(e.x, e.y)
-    
-        self.money_bags = []
+        self.init_emeralds()
+        self.init_money_bags()
         #initialize emeralds according to level configuration
         self.is_pause = False
         self.digger = Digger(ROWS-1, COLS//2)
@@ -731,7 +747,16 @@ class Game:
         for i in self.level.enemies_info:
             #each enemy speed, delay for release, update_gap, ignore_prob
             self.enemies.append(Nobbin(0, COLS-1, i[0], i[1], i[2], i[3]))  
-         
+    def init_emeralds(self):
+        for i in range(ROWS):
+            for j in range(COLS):
+                if self.level.emeralds[i][j] == 1:
+                    self.level.emeralds[i][j] = Emerald(i, j)
+    def init_money_bags(self):
+        for i in range(ROWS):
+            for j in range(COLS):
+                if self.level.money_bags_layout[i][j] == 1:
+                    self.level.money_bags.append(MoneyBag(i, j))
         
     def game_setup(self):
         self.__init__()
@@ -745,6 +770,8 @@ class Game:
         if self.is_pause:
             self.screens[self.active_screen].key_handler(key_pressed)
         else: 
+            if key_pressed == ord('L'):
+                self.init_new_level()
             self.digger.key_pressed(key_pressed)
             
     def display(self):
@@ -757,11 +784,11 @@ class Game:
             self.ground.display()
             for e in self.enemies:
                 e.display()
-            for row in self.emeralds:
+            for row in self.level.emeralds:
                 for e in row:
                     if e != 0:
                         e.display()
-            for b in self.money_bags:
+            for b in self.level.money_bags:
                 b.display()
                 
             self.digger.display()
@@ -781,7 +808,7 @@ class Game:
             
             
     def check_end_game(self):
-        if self.level.emeralds_num == self.emeralds_collected:
+        if self.level.emeralds_num == self.level.emeralds_collected:
             if self.level_num < MAX_LEVEL: 
                 self.init_new_level()
             else:
@@ -796,11 +823,9 @@ class Game:
         self.enemies = []
         self.emeralds_collected = 0
         self.init_enemies()
-        self.emeralds = [[0 for j in range(COLS)] for i in range(ROWS)]  #2d array with object of emerald if there is one
-        for e in self.level.emeralds_pos:
-            self.emeralds[e.x][e.y] = Emerald(e.x, e.y)
-    
-        self.money_bags = []
+        self.init_emeralds()
+        self.init_money_bags()
+
         #initialize emeralds according to level configuration
         self.digger = Digger(ROWS-1, COLS//2)
         # self.ground = [] #array of pixels
