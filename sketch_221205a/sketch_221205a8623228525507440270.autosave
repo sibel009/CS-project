@@ -218,15 +218,10 @@ class Digger (Creature): #can create paths in maze
         if released_key in DIRS and self.key_handler == released_key:
             self.key_handler = None
      
-    def is_emerald_collected(self):
-        if self.x % CELL_W == 0 and (self.y - HEADER_H)%CELL_H == 0:
-            if game.emeralds[self.row][self.col] != 0:
-                game.emeralds[self.row][self.col].collected()
-            
+    
     
     def update(self):
         # print(self.key_handler)
-        self.is_emerald_collected()
         if self.key_handler != None:
             # self.update_grid_pos()
             # print(str(self.key_handler))
@@ -494,7 +489,8 @@ class Maze: #layout of board, where enemies who cannot dig can go, is a graph re
         idx = INC.index([new.x - prev.x, new.y - prev.y])
         self.adj[prev.y][prev.x][idx] = 1
         self.adj[new.y][new.x][(idx+2)%4] = 1 # creating edge in other direction
-       
+        if game.emeralds[new.y][new.x] != 0:
+            game.emeralds[new.y][new.x].collected()
         
         
     
@@ -536,6 +532,9 @@ class MainMenu:
             image(self.backgrnd, 0, 0, W_WIDTH, W_HEIGHT)
         if self.mode == 1:
             image(self.guide, 0, 0, W_WIDTH, W_HEIGHT)
+            textSize(20)
+            fill(255,40,255)
+            text("Press SPACE to return to the main menu", 0, W_HEIGHT-100, W_WIDTH, 100)
             
         if self.mode == 2:
             background(120)
@@ -573,11 +572,11 @@ class MainMenu:
     def click_handler(self, mouse):
         #game starts upon click
         if self.mode == 0:
-            if mouse.x >= 450 and mouse.x <= 793 and mouse.y >= 620 and mouse.y <= 775:
+            if mouse.x >= 469 and mouse.x <= 780 and mouse.y >= 593 and mouse.y <= 721:
                 self.start_game()
-            if mouse.x >= 450 and mouse.x <= 793 and mouse.y >= 430 and mouse.y <= 587:
+            if mouse.x >= 469 and mouse.x <= 780 and mouse.y >= 390 and mouse.y <= 545:
                 self.mode = 2
-            if mouse.x >= 450 and mouse.x <= 793 and mouse.y >= 235 and mouse.y <= 390:
+            if mouse.x >= 469 and mouse.x <= 780 and mouse.y >= 200 and mouse.y <= 345:
                 self.mode = 1
         else:
             self.mode = 0
@@ -596,40 +595,40 @@ class MainMenu:
 class GameOverScreen:
     def __init__(self):
         self.user_name = ""
-        self.is_typing_active = False
-        self.backgrnd = []
-        for i in range(2):
-            self.backgrnd.append(loadImage(PATH+"//images//game_over{0}.png".format(i)))
         
     def key_handler(self, key_pressed):
         #recieving user name to write it later in scoreboard
-        print("KEY", key_pressed)
-        print("username", self.user_name)
         if key_pressed == 32:
             game.add_to_scoreboard(self.user_name)
             game.active_screen = 1
-        elif key_pressed == 10:
-            self.is_typing_active = False
-        elif self.is_typing_active and key_pressed == 8:
-            self.user_name = self.user_name[:-1]
-        elif self.is_typing_active and chr(key_pressed).isalpha():
+        elif chr(key_pressed).isalpha():
             self.user_name+= chr(key_pressed)
         
     def display(self):
-        image(self.backgrnd[int(game.won)], 0, 0)
-        if self.is_typing_active:
-            fill(20)
-            rect(630, 30, 200, 40)
+        background(0)
+        rectMode(CENTER)
+        if game.won:
+            message = "CONGRATS! You survived and ate all emeralds"
+            fill(0,255,0)
+        else:
+            message = "GAME OVER! You were killed by Nobbin"
+            fill(255,0,0)
+        textSize(48)
+        rectMode(CENTER)
+        textAlign(CENTER)
+        text(message, W_WIDTH//2, W_HEIGHT//2, W_WIDTH, 100)
+        text("Your score: " + str(game.score), W_WIDTH//2, W_HEIGHT//2+200, W_WIDTH, 100)
+        rectMode(CORNER)
         fill(255)
-        textSize(30)
-        textAlign(LEFT)
-        text(self.user_name, 630, 33, 200, 40)
-        text(str(game.score), 656, 687, 200, 40)
+        text("Your name: " + self.user_name, 0, 0, W_WIDTH, 100)
+        textSize(20)
+        fill(255,0,255)
+        text("Press SPACE to return to the main menu", 0, W_HEIGHT-100, W_WIDTH, 100)
         
-    def click_handler(self, mouse):
-        # activates username typing
-        if mouse.y >= 30 and mouse.y <= 65 and mouse.x >= 620 and mouse.x <= 900:
-            self.is_typing_active = True 
+    def click_handler(self, coord):
+        #returns to welcome screen upon click
+        game.add_to_scoreboard(self.user_name)
+        game.active_screen = 1
         
         
 
@@ -767,18 +766,14 @@ class Game:
             self.digger.display()
             if DISPLAY_GRID:
                 self.display_grid()
-            self.display_score()
+            textSize(48)
+            rectMode(CORNER)
+            fill(0)
+            rect(0, 0, W_WIDTH, HEADER_H)
+            fill(50,205,50)
+            textAlign(LEFT)
+            text("Score: " + str(self.score), 50, HEADER_H//4, 300, HEADER_H)
             self.check_end_game()
-            
-    def display_score(self):
-        textSize(48)
-        rectMode(CORNER)
-        fill(0)
-        rect(0, 0, W_WIDTH, HEADER_H)
-        fill(50,205,50)
-        textAlign(LEFT)
-        text("Score: " + str(self.score), 50, HEADER_H//4, 300, HEADER_H)
-            
             
     def check_end_game(self):
         if self.level.emeralds_num == self.emeralds_collected:
